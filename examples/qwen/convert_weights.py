@@ -69,7 +69,6 @@ def get_config_mapping(nt_to_hf: bool = True) -> dict[str, str]:
         "num_key_value_heads": "num_key_value_heads",
         "pad_token_id": "pad_token_id",
         "rms_norm_eps": "rms_norm_eps",
-        "rope_scaling": "rope_scaling",
         "rope_theta": "rope_theta",
         "tie_word_embeddings": "tie_word_embeddings",
         "use_cache": "use_cache",
