@@ -70,6 +70,9 @@ def convert_nt_to_hf(nanotron_model: LlamaForTraining, hf_model: AutoModelForCau
     hf_to_nt = get_weight_mapping(model_config, nt_to_hf=False)
     for module_name_hf, module_hf in hf_model.named_modules():
         for param_name_hf, param_hf in module_hf.named_parameters(recurse=False):
+            print(f"{module_name_hf}.{param_name_hf}")
+    for module_name_hf, module_hf in hf_model.named_modules():
+        for param_name_hf, param_hf in module_hf.named_parameters(recurse=False):
             # Get the Nanotron parameter
             nanotron_key = hf_to_nt[f"{module_name_hf}.{param_name_hf}"]
             param = nanotron_model_state_dict[nanotron_key]
@@ -114,7 +117,7 @@ def convert_checkpoint_and_save(checkpoint_path: Path, save_path: Path, tokenize
     # Init huggingface model.
     with init_on_device_and_dtype(torch.device("cuda"), torch.bfloat16):
         model_config_hf = get_hf_config(model_config)
-        hf_model = AutoModelForCausalLM._from_config(model_config_hf)
+        hf_model = AutoModelForCausalLM.from_config(model_config_hf)
 
     # Copy weights, initialize tokenizer and save model.
     if tokenizer_name is not None:
