@@ -299,7 +299,7 @@ class CausalSelfAttention(nn.Module, AttachableStore):
             config.num_attention_heads * self.d_qk + 2 * config.num_key_value_heads * self.d_qk,
             pg=tp_pg,
             mode=tp_mode,
-            bias=False,
+            bias=True,
             async_communication=tp_linear_async_communication,
             contiguous_chunks=qkv_contiguous_chunks,
             tp_recompute_allgather=parallel_config.tp_recompute_allgather,
