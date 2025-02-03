@@ -46,7 +46,10 @@ def convert_hf_to_nt(model_hf: AutoModelForCausalLM, model_nt: LlamaForTraining,
     in-place."""
 
     hf_sd = model_hf.state_dict()
+    print("hf_sd")
+    print(hf_sd)
     nt_to_hf = get_weight_mapping(config, nt_to_hf=True)
+    print(nt_to_hf)
 
     for module_name_nt, module_nt in model_nt.named_modules():
         for param_name_nt, param_nt in module_nt.named_parameters(recurse=False):
@@ -87,7 +90,12 @@ def convert_hf_to_nt(model_hf: AutoModelForCausalLM, model_nt: LlamaForTraining,
             # All other cases are simple 1-to-1 correspondence.
             else:
                 hf_key = nt_to_hf[f"{module_name_nt}.{param_name_nt}"]
-                param = hf_sd[hf_key]
+                try:
+                    param = hf_sd[hf_key]
+                except TypeError:
+                    print(hf_key)
+                    throw ModuleNotFoundError
+                
 
             with torch.no_grad():
                 param_nt.copy_(param)
