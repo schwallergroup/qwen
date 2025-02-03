@@ -52,7 +52,20 @@ def convert_hf_to_nt(model_hf: AutoModelForCausalLM, model_nt: LlamaForTraining,
         for param_name_nt, param_nt in module_nt.named_parameters(recurse=False):
             # In the case of qkv_proj, the nt_to_hf has exactly three keys, ccorresponding
             # to q, k, v.
-            if "qkv_proj" in module_name_nt:
+            if "qkv_proj.weight" in module_name_nt:
+                key_k, key_q, key_v = sorted(nt_to_hf[f"{module_name_nt}.{param_name_nt}"])
+                q = hf_sd[key_q]
+                k = hf_sd[key_k]
+                v = hf_sd[key_v]
+                param = _handle_attention_block(
+                    q,
+                    k,
+                    v,
+                    config.num_attention_heads,
+                    config.num_key_value_heads,
+                    config.hidden_size // config.num_attention_heads,
+                )
+            elif "qkv_proj.bias" in module_name_nt:
                 key_k, key_q, key_v = sorted(nt_to_hf[f"{module_name_nt}.{param_name_nt}"])
                 q = hf_sd[key_q]
                 k = hf_sd[key_k]
@@ -96,6 +109,8 @@ def convert_checkpoint_and_save(checkpoint_path: Path, save_path: Path):
 
     # Init nanotron model.
     model_config = get_nanotron_config(hf_model.config)
+    print("nano")
+    print(hf_model.config)
     nanotron_model = load_nanotron_model(model_config=model_config)
 
     # Copy weights and save model.
