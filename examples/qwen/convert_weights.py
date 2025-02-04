@@ -103,6 +103,7 @@ def load_nanotron_model(
     device: torch.device = torch.device("cuda"),
     dtype: torch.dtype = torch.bfloat16,
     checkpoint_path: Optional[Path] = None,
+    hf_weights: Optional[torch.nn.Module] = None
 ) -> LlamaForTraining:
     """
     Creates and returns a nanotron model.
@@ -133,6 +134,42 @@ def load_nanotron_model(
         dtype=dtype,
         device=device,
     )
+    print("nanotron model print")
+    print(nanotron_model)
+    print(nanotron_model.model.decoder[0].pp_block.attn.qkv_proj)
+    print(hf_weights.model.layers[0].self_attn.q_proj.bias)
+    #print(hf_weights.model.layers[0].self_attn.q_proj.weights.shape)
+    print(nanotron_model.model.decoder[0].pp_block.attn.qkv_proj.weight.shape)
+    def _handle_attention_block(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, n_q_heads: int=28, n_kv_heads: int=4, d_qk: int=128) -> torch.Tensor:
+        # Huggingface Llama separates the q, k, v weights (as opposed to nanotron).
+        # Furthermore, in the rotary embeddings in nanotron expects interleaved pairs of even
+        # and odd dimensions GPT-J style, while the huggingface implementation expects
+        # the whole 1st half and then the whole 2nd half GPT-NeoX style (for more information
+        # see flash_attn.layers.rotary.RotaryEmbedding).
+        # This function handles the concatenation of the q, k, v weights and proper permutation
+        # to ensure correct transformation.
+
+        def interleave(w: torch.Tensor):
+            w_new = []
+            for head_w in w.split(d_qk):
+                head_w = head_w.view(2, d_qk // 2, -1).transpose(0, 1).reshape(d_qk, -1)
+                w_new.append(head_w)
+            return torch.cat(w_new)
+
+        q = interleave(q)
+        k = interleave(k)
+        print(q.shape)
+        print(k.shape)
+        print(v.shape)
+        return torch.cat([q.squeeze(1), k.squeeze(1), v])
+
+    for i in range(28):
+        bias = _handle_attention_block(hf_weights.model.layers[i].self_attn.q_proj.bias,hf_weights.model.layers[i].self_attn.k_proj.bias,hf_weights.model.layers[i].self_attn.v_proj.bias)
+        print(bias.shape)
+        nanotron_model.model.decoder[i].pp_block.attn.qkv_proj.bias=torch.nn.Parameter(bias)
+        print(nanotron_model.model.decoder[i].pp_block.attn.qkv_proj)
+        #nanotron_model.model.decoder[i].pp_block.attn.qkv_proj.bias=True
+    
     mark_tied_parameters(model=nanotron_model, parallel_context=parallel_context)
     # Load checkpoint directly in memory and then only keep the state dictionary
     if checkpoint_path is not None:

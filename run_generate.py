@@ -184,6 +184,8 @@ def main():
             tokenizer_config=TokenizerConfig(max_input_length=None),
             is_bench=os.environ.get("USE_BENCH", "0") == "1",
         )
+        print("out")
+        print(outputs)
         for output in outputs:
             input_ids = output.input_ids
             generated_ids = output.generation_ids
@@ -191,7 +193,7 @@ def main():
                 assert isinstance(generated_ids, TensorPointer)
                 continue
             assert isinstance(generated_ids, torch.Tensor)
-
+            
             log_rank(
                 f"input: {tokenizer.decode(input_ids, clean_up_tokenization_spaces=False)[:1000]}",
                 logger=logger,

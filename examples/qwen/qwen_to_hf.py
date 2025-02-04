@@ -66,7 +66,7 @@ def convert_nt_to_hf(nanotron_model: LlamaForTraining, hf_model: AutoModelForCau
     in-place."""
 
     nanotron_model_state_dict = nanotron_model.state_dict()
-
+    print(nanotron_model_state_dict)
     hf_to_nt = get_weight_mapping(model_config, nt_to_hf=False)
     for module_name_hf, module_hf in hf_model.named_modules():
         for param_name_hf, param_hf in module_hf.named_parameters(recurse=False):
@@ -75,8 +75,12 @@ def convert_nt_to_hf(nanotron_model: LlamaForTraining, hf_model: AutoModelForCau
         for param_name_hf, param_hf in module_hf.named_parameters(recurse=False):
             # Get the Nanotron parameter
             nanotron_key = hf_to_nt[f"{module_name_hf}.{param_name_hf}"]
-            param = nanotron_model_state_dict[nanotron_key]
-
+            try:
+                param = nanotron_model_state_dict[nanotron_key]
+            except KeyError:
+                print("pass")
+                print(nanotron_key)
+                continue
             if "qkv_proj" in nanotron_key:
                 proj_name = module_name_hf.split(".")[4][0]
                 param = _handle_attention_block(
@@ -105,15 +109,26 @@ def convert_checkpoint_and_save(checkpoint_path: Path, save_path: Path, tokenize
     """Loads the nanotron checkpoint in `checkpoint_path`, creates
     a new huggingface instance, copies the weights from the nanotron checkpoint
     and saves the transformed huggingface to `save_path`."""
+    
+    #with init_on_device_and_dtype(torch.device("cuda"), torch.bfloat16):
+    #    model_config_hf = get_hf_config(model_config)
+    #    hf_model = AutoModelForCausalLM.from_config(model_config_hf)
 
     # Init nanotron model.
     with open(checkpoint_path / "model_config.json", "r") as f:
         attrs = json.load(f)
         model_config = NanotronLlamaConfig(**attrs)
+    
+    with init_on_device_and_dtype(torch.device("cuda"), torch.bfloat16):
+        model_config_hf = get_hf_config(model_config)
+        hf_model = AutoModelForCausalLM.from_config(model_config_hf)
+
     nanotron_model = load_nanotron_model(
-        model_config=model_config,
+        model_config=None,
         checkpoint_path=checkpoint_path,
+	hf_weights=hf_model
     )
+    print(model_config)
     # Init huggingface model.
     with init_on_device_and_dtype(torch.device("cuda"), torch.bfloat16):
         model_config_hf = get_hf_config(model_config)
