@@ -18,7 +18,7 @@ from nanotron.models.llama import LlamaForTraining
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from transformers import Qwen2Config as HFLlamaConfig
 
-TEST_PROMPT = "What is the SMILES of [START_MOL] NaBH4 [END_MOL]?\n The SMILES is [START_SMILES] "
+TEST_PROMPT = "The future of AI is " #"What is the SMILES of [START_MOL] NaBH4 [END_MOL]?\n The SMILES is [START_SMILES] "
 
 
 def _handle_attention_block(
@@ -49,6 +49,39 @@ def _handle_attention_block(
         return interleave(qkv[index_end_q:index_end_k])
     return qkv[index_end_k:]
 
+def _handle_attention_block_bias(
+    qkv: torch.Tensor, part: Literal["q", "k", "v"], n_q_heads: int, n_kv_heads: int, d_qk: int
+) -> torch.Tensor:
+    # Huggingface Llama separates the q, k, v weights (as opposed to nanotron).
+    # Furthermore, in the rotary embeddings in nanotron expects interleaved pairs of even
+    # and odd dimensions GPT-J style, while the huggingface implementation expects
+    # the whole 1st half and then the whole 2nd half GPT-NeoX style (for more information
+    # see flash_attn.layers.rotary.RotaryEmbedding).
+    # This function handles the concatenation of the q, k, v weights and proper permutation
+    # to ensure correct transformation.
+
+    def interleave_bias(w: torch.Tensor):
+        w_new = []
+        for head_w in w.split(d_qk):
+            head_w = head_w.view(2, d_qk // 2, -1).transpose(0, 1).reshape(d_qk, -1)
+            w_new.append(head_w)
+        return torch.cat(w_new)
+
+    assert part in ["q", "k", "v"], "part must be one of [q, k, v]"
+
+    index_end_q = n_q_heads * d_qk
+    index_end_k = index_end_q + n_kv_heads * d_qk
+    #print("q bias size")
+    #print(q.size())
+    #print(qkv.shape)
+    if part == "q":
+        return interleave_bias(qkv[:index_end_q])
+    if part == "k":
+        return interleave_bias(qkv[index_end_q:index_end_k])
+    return qkv[index_end_k:]
+    #q = interleave_bias(q)
+    #k = interleave_bias(k)
+    #return torch.cat([q.squeeze(1), k.squeeze(1), v])
 
 def _handle_gate_up_proj(gate_up_proj: torch.Tensor, gate: bool) -> torch.Tensor:
     # The gate and up projection are bundled in nanotron.
@@ -70,10 +103,16 @@ def convert_nt_to_hf(nanotron_model: LlamaForTraining, hf_model: AutoModelForCau
     hf_to_nt = get_weight_mapping(model_config, nt_to_hf=False)
     for module_name_hf, module_hf in hf_model.named_modules():
         for param_name_hf, param_hf in module_hf.named_parameters(recurse=False):
+            print("printing fully")
             print(f"{module_name_hf}.{param_name_hf}")
+            print(param_hf.shape)
+    print("hf to nt")
+    print(hf_to_nt)
     for module_name_hf, module_hf in hf_model.named_modules():
         for param_name_hf, param_hf in module_hf.named_parameters(recurse=False):
             # Get the Nanotron parameter
+            print(f"{module_name_hf}.{param_name_hf}")
+            print(param_hf.shape)
             nanotron_key = hf_to_nt[f"{module_name_hf}.{param_name_hf}"]
             try:
                 param = nanotron_model_state_dict[nanotron_key]
@@ -81,7 +120,8 @@ def convert_nt_to_hf(nanotron_model: LlamaForTraining, hf_model: AutoModelForCau
                 print("pass")
                 print(nanotron_key)
                 continue
-            if "qkv_proj" in nanotron_key:
+            if "qkv_proj" in nanotron_key and param_name_hf=="weight":
+                print("testing weights fully")
                 proj_name = module_name_hf.split(".")[4][0]
                 param = _handle_attention_block(
                     param,
@@ -90,6 +130,21 @@ def convert_nt_to_hf(nanotron_model: LlamaForTraining, hf_model: AutoModelForCau
                     model_config.num_key_value_heads,
                     model_config.hidden_size // model_config.num_attention_heads,
                 )
+            elif "qkv_proj" in nanotron_key and param_name_hf=="bias":
+                print("testing bias fully")
+                
+                proj_name = module_name_hf.split(".")[4][0]
+                param = _handle_attention_block_bias(
+                    param,
+                    proj_name,
+                    model_config.num_attention_heads,
+                    model_config.num_key_value_heads,
+                    model_config.hidden_size // model_config.num_attention_heads,
+                )
+                print(param)
+                print(param.shape)
+                if len(param.shape)==2:
+                    param=param.squeeze(1)
 
             elif "gate_up_proj" in nanotron_key:
                 gate = "gate" in module_name_hf
@@ -132,7 +187,7 @@ def convert_checkpoint_and_save(checkpoint_path: Path, save_path: Path, tokenize
     # Init huggingface model.
     with init_on_device_and_dtype(torch.device("cuda"), torch.bfloat16):
         model_config_hf = get_hf_config(model_config)
-        hf_model = AutoModelForCausalLM.from_config(model_config_hf)
+        hf_model = AutoModelForCausalLM.from_pretrained("/iopsstor/scratch/cscs/ssenthil/qwen")
 
     # Copy weights, initialize tokenizer and save model.
     if tokenizer_name is not None:

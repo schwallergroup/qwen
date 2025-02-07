@@ -95,6 +95,16 @@ class TensorMetadata:
 
     @classmethod
     def from_str_dict(cls, dictionary: Dict[str, str]) -> "TensorMetadata":
+        print("print tensor data meta")
+        print(TensorMetadata)
+        print(cls._metadata_config)
+        #print(dictionary)
+
+        if dictionary=={}:
+            dictionary={'unsharded_shape': '(4608)', 'local_global_slices_pairs': '0,0,None|None,None,None#0,0,None|None,None,None;0,4096,None|None,None,None#0,4096,None|None,None,None;4096,4608,None|None,None,None#4096,4608,None|None,None,None', 'version': '1.4'}    
+        #dictionary={'unsharded_shape': '(4608)', 'version': '1.4', 'local_global_slices_pairs': '0,None,None|None,None,None#0,None,None|None,None,None;None,4096,None|None,None,None#None,4096,None|None,None,None;4096,4608,None|None,None,None#4096,4608,None|None,None,None'}
+        
+        print(dictionary)
         tensor_metadata: TensorMetadata = dacite.from_dict(
             data_class=TensorMetadata,
             data=dictionary,

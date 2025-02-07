@@ -59,6 +59,7 @@ def get_path(
 
 def extract_tp_pp_rank_from_shard_path(shard_path: Path):
     pattern = r"pp-rank-(\d+)-of-\d+_tp-rank-(\d+)-of-\d+"
+    print(pattern)
     match = re.search(pattern, str(shard_path))
     pp_rank, tp_rank = match.groups()
     return pp_rank, tp_rank

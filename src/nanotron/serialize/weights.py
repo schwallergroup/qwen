@@ -29,13 +29,16 @@ logger = logging.get_logger(__name__)
 
 def save_weights(model: nn.Module, parallel_context: ParallelContext, root_folder: Path):
     root_folder = root_folder / "model"
-
+    #print("running diags")
     # We save only `dist.get_rank(parallel_context.dp_pg) == 0`
     # TODO @thomasw21: Figure how this works with Zero-3
     if dist.get_rank(parallel_context.dp_pg) != 0:
         return
 
     module_id_to_prefix = {id(module): f"{module_name}." for module_name, module in model.named_modules()}
+    #print("running diagnostics")
+    #print(module_id_to_prefix)
+    #raise IndexError
     # Fix the root_model
     module_id_to_prefix[id(model)] = ""
 
@@ -205,6 +208,8 @@ def load_weights(
 
     module_id_to_prefix = {id(module): f"{module_name}." for module_name, module in model.named_modules()}
     # Fix the root_model
+    print("run diagnostics")
+    print(module_id_to_prefix)
     module_id_to_prefix[id(model)] = ""
 
     checkpoint_version: Optional[Version] = None
@@ -273,6 +278,7 @@ def load_weights(
                 # We search for all the files from the shards, concatenate the "unsharded" tensor
                 # and load the specific shard we're interested in.
                 if not param.is_sharded:
+                    #pass
                     raise ValueError(
                         f"`{name}` is not a sharded parameter. It's possible you were expecting {path} to exist."
                     )
